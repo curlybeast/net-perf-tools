@@ -25,6 +25,7 @@ BEGIN {
     
     dump_table("raw", STATS_F)
     dump_table("nat", STATS_F)
+    dump_table("mangle", STATS_F)
     dump_table("filter", STATS_F)
 
     line = 0
