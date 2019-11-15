@@ -148,7 +148,5 @@ plot
 ```
 
 This produces graphs like:
-(![Graph 1] https://github.com/curlybeast/net-perf-tools/raw/master/examples/30s-iperf3.png "iPerf3 over 30 seconds")
-(![Graph 2] https://github.com/curlybeast/net-perf-tools/raw/master/examples/30s-idle.png "Idling over 30 seconds")
-
-![Graph to show output][]
+<img src="https://github.com/curlybeast/net-perf-tools/raw/master/examples/30s-iperf3.png" alt="iPerf3 over 30 seconds"/>
+<img src="https://github.com/curlybeast/net-perf-tools/raw/master/examples/30s-idle.png" alt="Idling over 30 seconds"/>
