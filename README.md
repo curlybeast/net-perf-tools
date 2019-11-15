@@ -148,5 +148,7 @@ plot
 ```
 
 This produces graphs like:
+<br/>
 <img src="https://github.com/curlybeast/net-perf-tools/raw/master/examples/30s-iperf3.png" alt="iPerf3 over 30 seconds"/>
+<br/>
 <img src="https://github.com/curlybeast/net-perf-tools/raw/master/examples/30s-idle.png" alt="Idling over 30 seconds"/>
