@@ -33,19 +33,19 @@ function read_file(file)
 
 function plot_cpu_spec(title, x_label, y_label, y2_label)
 {
-    p = p \
-        "set title \"" title "\";\n" \
-        "set key autotitle columnheader;\n" \
-        "set autoscale xfix;\n" \
-        "set y2tics auto;\n" \
-        "set ytics nomirror;\n" \
-        "set xtics format \"%S\";\n" \
-        "set timefmt \"" timefmt "\";\n" \
-        "set xdata time;\n" \
-        "set format y2 \"%.0s%cB\";\n" \
-        "set xlabel \"" x_label "\";\n" \
-        "set ylabel \"" y_label "\";\n" \
-        "set y2label \"" y2_label "\";\n"
+    # p = p \
+    #     "set title \"" title "\";\n" \
+    #     "set key autotitle columnheader;\n" \
+    #     "set autoscale xfix;\n" \
+    #     "set y2tics auto;\n" \
+    #     "set ytics nomirror;\n" \
+    #     "set xtics format \"%S\";\n" \
+    #     "set timefmt \"" timefmt "\";\n" \
+    #     "set xdata time;\n" \
+    #     "set format y2 \"%.0s%cB\";\n" \
+    #     "set xlabel \"" x_label "\";\n" \
+    #     "set ylabel \"" y_label "\";\n" \
+    #     "set y2label \"" y2_label "\";\n"
     return p
 }
 
@@ -68,21 +68,20 @@ function plot_cpu_add_net(p, filename)
 
     return p \
         "\"" filename "\" using 1:2 smooth mcs with lines lc rgb \"red\" lw 2 dt (5, 5, 5, 5) axis x1y2,\n" \
-        "\"" filename "\" using 1:3 smooth mcs with lines lc rgb \"pink\" lw 2 dt (5, 5, 5, 5) axis x1y2,\n" \
+        "\"" filename "\" using 1:3 smooth mcs with lines lc rgb \"purple\" lw 2 dt (5, 5, 5, 5) axis x1y2,\n" \
         "\"" filename "\" using 1:4 smooth mcs with lines lc rgb \"blue\" lw 2 dt (5, 5, 5, 5) axis x1y2,\n" \
         "\"" filename "\" using 1:5 smooth mcs with lines lc rgb \"cyan\" lw 2 dt (5, 5, 5, 5) axis x1y2"
 }
 
-function plot_cpu_add_pid(p, filename, pid, command)
+function plot_cpu_add_pid(p, filename, pid, command, max_size)
 {
     debug("Adding to CPU plot for PID " pid)
 
     # usr = 4
     # sys = 5
     # cpu = 6
-
     return p \
-        "\"" filename "\" using 1:6 title \"" command " (" pid ")\" noenhanced smooth mcs with lines axis x1y1"
+        "\"" filename "\" using 1:6 title \"" command "\" noenhanced smooth mcs with lines axis x1y1"
 }
 
 function plot_add_next(p, n)
@@ -98,8 +97,21 @@ function plot_add_next(p, n)
 
 function plot_cpu(filename)
 {
-    p = plot_cpu_spec("Graph to show CPU use per process\nagainst network throughput over time", "Seconds", "CPU %", "Bytes / Second")
-    p = p "plot"
+    p = \
+        "set font \"Verdana,8\";\n" \
+        "set terminal qt size 768,1024;\n" \
+        "set multiplot layout 2, 1;\n" \
+        "set key autotitle columnheader;\n" \
+        "set autoscale xfix;\n" \
+        "set xtics format \"%S\";\n" \
+        "set timefmt \"" timefmt "\";\n" \
+        "set xdata time;\n" \
+        "set xlabel \"Seconds\";\n" \
+
+    p = p \
+        "set key outside above;\n" \
+        "set ylabel \"CPU %\";\n"
+    p = p "plot\n"
     n = 0
 
     for (pid in pids_to_graph) {
@@ -115,9 +127,13 @@ function plot_cpu(filename)
         p = plot_cpu_add_pid(p, pid_filename, pid, command)
     }
 
-    p = plot_add_next(p, n++)
-    p = plot_cpu_add_net(p, NET_F)
-    p = p ";"
+    p = plot_add_next(p, n++) ";\n"
+    p = p \
+        "set key outside below;\n" \
+        "set ylabel \"Bytes\";\n" \
+        "set format y \"%.0s%cB\";\n"
+    p = p "plot\n"
+    p = plot_cpu_add_net(p, NET_F) ";"
 
     plot(p)
 }
