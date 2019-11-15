@@ -1,0 +1,188 @@
+#!/usr/bin/awk -f
+#
+# Martyn Russell <martyn@cleverpea.com>
+# 
+
+function debug(message)
+{
+    print message
+}
+
+function run(cmd, print_output)
+{
+    cmd = cmd "; echo \"$?\""
+
+    while ((cmd | getline status) > 0) {
+        if (print_output) {
+            print
+        }
+    }
+
+    close(cmd)
+
+    return status
+}
+
+function read_file(file)
+{
+    while ((getline line < file) > 0) {
+    }
+ 
+    close(file)
+ 
+    return line
+}
+
+function pidstat_dump(secs, filename)
+{
+    if (secs > 1) {
+        debug("Gathering stats over " secs " secs")
+    }
+
+    # pidstat -h -u -I -t -w 1|awk '$1 ~ /^#.*/ || ( $8 >= 1.00 && $11 !~ /pidstat/ && $2 != 0 )'
+    run("pidstat -h -u -I -t -w 1 " secs " >> " filename, 0)
+
+    if (secs > 1) {
+        debug("Got stats")
+    }
+}
+
+function net_get_rx(iface)
+{
+    rx_filename = "/sys/class/net/" iface "/statistics/rx_bytes"
+    bytes = read_file(rx_filename)
+    return bytes
+}
+
+function net_get_tx(iface)
+{
+    tx_filename = "/sys/class/net/" iface "/statistics/tx_bytes"
+    bytes = read_file(tx_filename)
+    return bytes
+}
+
+function collect_data(iface1, iface2)
+{
+    count = -1
+
+    # Headers
+    print "time \"" iface1 " rx\" \"" iface1 " tx\" \"" iface2 " rx\" \"" iface2 " tx\"" >> NET_F
+
+    while(count++ < secs) {
+        if1_rx_s = net_get_rx(iface1)
+        if1_tx_s = net_get_tx(iface1)
+        if2_rx_s = net_get_rx(iface2)
+        if2_tx_s = net_get_tx(iface2)
+
+        # The pidstat process already takes 1 sec
+        pidstat_dump(1, STATS_F)
+
+        time = strftime("%H:%M:%S", systime())
+
+        if1_rx_e = net_get_rx(iface1)
+        if1_tx_e = net_get_tx(iface1)
+        if2_rx_e = net_get_rx(iface2)
+        if2_tx_e = net_get_tx(iface2)
+
+        rbps[iface1] = if1_rx_e - if1_rx_s
+        tbps[iface1] = if1_tx_e - if1_tx_s
+        rbps[iface2] = if2_rx_e - if2_rx_s
+        tbps[iface2] = if2_tx_e - if2_tx_s
+
+        print time " " rbps[iface1] " " tbps[iface1] " " rbps[iface2] " " tbps[iface2] >> NET_F
+    }
+}
+
+function add_arg(filename)
+{
+    ARGV[ARGC++] = filename
+}
+
+BEGIN {
+    STATS_F = "/tmp/pidstat-stats"
+    NET_F = "/tmp/pidstat-net"
+    CONDENSED_F = "/tmp/pidstat-condensed"
+    TOTP_F = "/tmp/pidstat-totp"
+
+    # Start from clean slate
+    run("rm /tmp/pidstat-*", 0)
+
+    # Requirements to graph
+    secs = 30
+    min_cpu = 2.00
+    print_header = 0
+    iface1 = "eth0"
+    iface2 = "eth3"
+
+    debug("Collecting stats over " secs " seconds, minimum CPU threshold is " min_cpu "%, using NICs " iface1 "/" iface2)
+
+    # Start in background
+    collect_data(iface1, iface2)
+
+    # Compatibility switches
+    is_busybox = 0
+    is_debian10 = 0
+    has_epoch = 1
+
+    col["max"] = is_busybox ? 11 : is_debian10 ? 13 : 12
+    col["pid"] = is_busybox ? 2 : 4
+    col["pid2"] = is_busybox ? 3 : 3
+    col["cpu"] = is busybox ? 7 : 8
+    col["cpunum"] = is_busybox ? 8 : is_debian10 ? 10 : 9
+    col["usr"] = is_busybox ? 4 : 5
+    col["sys"] = is_busybox ? 5 : 6
+    col["cswch"] = is_busybox ? 9 : is_debian10 ? 11 : 10
+    col["nvcswch"] = is_busybox ? 10 : is_debian10 ? 12 : 11
+    col["command"] = is_busybox ? 11 : is_debian10 ? 13 : 12
+
+    # Variables
+    secs = 0
+    line = 0
+
+    add_arg(STATS_F)
+}
+{
+    if (NF < col["max"]) {
+        next;
+    }
+
+    # Use comments to know when new second starts
+    if ($1 ~ /^#.*/) {
+        secs++
+        line = 0
+        next
+    }
+
+    pid = $(col["pid"])
+
+    if (pid < 1) {
+        #pid = $(col["pid2"])
+        next
+    }
+
+    cpu = $(col["cpu"])
+    cpu_total = $(col["usr"]) + $(col["sys"])
+    command = $(col["command"])
+
+    sub(/\|__/, "", command)
+
+    time = has_epoch ? strftime("%H:%M:%S", $1) : $1
+    print time, pid, $(col["cpunum"]), $(col["usr"]), $(col["sys"]), cpu_total, $(col["cswch"]), $(col["nvcswch"]), command >> CONDENSED_F
+
+    if (cpu_total < min_cpu || command ~ /pidstat/ || pid == 0) {
+        next
+    } 
+
+    if (print_header) {
+        print "time pid cpu# usr sys cpu% ctxt nvctxt rx tx" >> TOTP_F
+        print_header = 0
+    }
+
+    print time, pid, $(col["cpunum"]), $(col["usr"]), $(col["sys"]), cpu_total, $(col["cswch"]), $(col["nvcswch"]), command >> TOTP_F
+    fflush(stdout)
+}
+END {
+    debug("Taring...")
+    run("tar -cvf pidstat.tar /tmp/pidstat-*", 0)
+    debug("Done")
+}

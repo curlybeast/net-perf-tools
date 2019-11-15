@@ -90,3 +90,65 @@ An example would be:
           5 |        372 | nat      | -A OUTPUT -o dummy0 -j OUTPUT_PORT_MAP_WAN
           5 |        436 | filter   | -A INPUT_MGNT_LAN -p icmp -j ACCEPT
 ```
+
+
+# pidstat-collect & pidstat-graph
+A pair of AWK scripts which collect network data with process CPU load and graphs them side by side.
+
+First, running `pidstat-collect` to collect data. Ths creates a file called `pidstat.tar`:
+```
+# pidstat-collect
+Collecting stats over 30 seconds, minimum CPU threshold is 2%, using NICs eth0/eth3
+Taring...
+tar: Removing leading `/' from member names
+Done
+```
+Second use `pidstat-graph` with the `pidstat.tar` file created:
+```
+# pidstat-graph pidstat.tar
+Cleaning environment first...
+Extracting data from './pidstat.tar'
+Plotting now...
+Adding to CPU plot for PID 1562
+Adding to CPU plot for PID 1568
+Adding to CPU plot for PID 2444
+Adding to CPU plot for PID 8020
+Adding to CPU plot for PID 14451
+Adding to CPU plot for PID 14469
+Adding to CPU plot for PID 26007
+Adding to CPU plot for PID 31491
+Adding to network plot
+Using:
+gnuplot -p -e 'set title "Graph to show CPU use per process
+against network throughput over time";
+set key autotitle columnheader;
+set autoscale xfix;
+set y2tics auto;
+set ytics nomirror;
+set xtics format "%S";
+set timefmt "%H:%M:%S";
+set xdata time;
+set format y2 "%.0s%cB";
+set xlabel "Seconds";
+set ylabel "CPU %";
+set y2label "Bytes / Second";
+plot
+"/tmp/pidstat-condensed-1562" using 1:6 title "gnome-terminal- (1562)" noenhanced smooth mcs with lines axis x1y1,
+"/tmp/pidstat-condensed-1568" using 1:6 title "Xorg (1568)" noenhanced smooth mcs with lines axis x1y1,
+"/tmp/pidstat-condensed-2444" using 1:6 title "gnome-shell (2444)" noenhanced smooth mcs with lines axis x1y1,
+"/tmp/pidstat-condensed-8020" using 1:6 title "sublime_text (8020)" noenhanced smooth mcs with lines axis x1y1,
+"/tmp/pidstat-condensed-14451" using 1:6 title "chromium (14451)" noenhanced smooth mcs with lines axis x1y1,
+"/tmp/pidstat-condensed-14469" using 1:6 title "Compositor (14469)" noenhanced smooth mcs with lines axis x1y1,
+"/tmp/pidstat-condensed-26007" using 1:6 title "chromium (26007)" noenhanced smooth mcs with lines axis x1y1,
+"/tmp/pidstat-condensed-31491" using 1:6 title "chromium (31491)" noenhanced smooth mcs with lines axis x1y1,
+"/tmp/pidstat-net" using 1:2 smooth mcs with lines lc rgb "red" lw 2 dt (5, 5, 5, 5) axis x1y2,
+"/tmp/pidstat-net" using 1:3 smooth mcs with lines lc rgb "pink" lw 2 dt (5, 5, 5, 5) axis x1y2,
+"/tmp/pidstat-net" using 1:4 smooth mcs with lines lc rgb "blue" lw 2 dt (5, 5, 5, 5) axis x1y2,
+"/tmp/pidstat-net" using 1:5 smooth mcs with lines lc rgb "cyan" lw 2 dt (5, 5, 5, 5) axis x1y2;'
+```
+
+This produces graphs like:
+https://github.com/curlybeast/net-perf-tools/raw/master/examples/30s-iperf3.png "iPerf3 over 30 seconds"
+https://github.com/curlybeast/net-perf-tools/raw/master/examples/30s-idle.png "Idling over 30 seconds"
+
+![Graph to show output][]

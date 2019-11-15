@@ -1,0 +1,187 @@
+#!/usr/bin/awk -f
+#
+# Martyn Russell <martyn@cleverpea.com>
+#
+
+function debug(message)
+{
+    print message
+}
+
+function run(cmd, print_output)
+{
+    cmd = cmd "; echo \"$?\""
+
+    while ((cmd | getline status) > 0) {
+        if (print_output) {
+            print
+        }
+    }
+
+    close(cmd)
+
+    return status
+}
+
+function read_file(file)
+{
+    while ((getline line < file) > 0) {
+    }
+    close(file)
+    return line
+}
+
+function plot_cpu_spec(title, x_label, y_label, y2_label)
+{
+    p = p \
+        "set title \"" title "\";\n" \
+        "set key autotitle columnheader;\n" \
+        "set autoscale xfix;\n" \
+        "set y2tics auto;\n" \
+        "set ytics nomirror;\n" \
+        "set xtics format \"%S\";\n" \
+        "set timefmt \"" timefmt "\";\n" \
+        "set xdata time;\n" \
+        "set format y2 \"%.0s%cB\";\n" \
+        "set xlabel \"" x_label "\";\n" \
+        "set ylabel \"" y_label "\";\n" \
+        "set y2label \"" y2_label "\";\n"
+    return p
+}
+
+function plot(p)
+{
+    cmd = "gnuplot -p -e '" p "'"
+    debug("Using:")
+    debug(cmd)
+    run(cmd, 1)
+}
+
+function plot_cpu_add_net(p, filename)
+{
+    debug("Adding to network plot")
+
+    # iface1 rx = 2
+    # iface1 tx = 3
+    # iface2 rx = 4
+    # iface2 tx = 5
+
+    return p \
+        "\"" filename "\" using 1:2 smooth mcs with lines lc rgb \"red\" lw 2 dt (5, 5, 5, 5) axis x1y2,\n" \
+        "\"" filename "\" using 1:3 smooth mcs with lines lc rgb \"pink\" lw 2 dt (5, 5, 5, 5) axis x1y2,\n" \
+        "\"" filename "\" using 1:4 smooth mcs with lines lc rgb \"blue\" lw 2 dt (5, 5, 5, 5) axis x1y2,\n" \
+        "\"" filename "\" using 1:5 smooth mcs with lines lc rgb \"cyan\" lw 2 dt (5, 5, 5, 5) axis x1y2"
+}
+
+function plot_cpu_add_pid(p, filename, pid, command)
+{
+    debug("Adding to CPU plot for PID " pid)
+
+    # usr = 4
+    # sys = 5
+    # cpu = 6
+
+    return p \
+        "\"" filename "\" using 1:6 title \"" command " (" pid ")\" noenhanced smooth mcs with lines axis x1y1"
+}
+
+function plot_add_next(p, n)
+{
+    if (n == 0) {
+        p = p "\n"
+    } else {
+        p = p ",\n"
+    }
+
+    return p
+}
+
+function plot_cpu(filename)
+{
+    p = plot_cpu_spec("Graph to show CPU use per process\nagainst network throughput over time", "Seconds", "CPU %", "Bytes / Second")
+    p = p "plot"
+    n = 0
+
+    for (pid in pids_to_graph) {
+        pid_filename = filename "-" pid
+        run("grep " pid " " filename " > " pid_filename, 0)
+
+        line = read_file(pid_filename)
+        n_stats = split(line, stats, " ")
+        command = stats[n_stats]
+        sub(/\|__/, "", command)
+
+        p = plot_add_next(p, n++)
+        p = plot_cpu_add_pid(p, pid_filename, pid, command)
+    }
+
+    p = plot_add_next(p, n++)
+    p = plot_cpu_add_net(p, NET_F)
+    p = p ";"
+
+    plot(p)
+}
+
+function add_arg(filename)
+{
+    ARGV[ARGC++] = filename
+}
+
+function del_arg(filename)
+{
+    for (arg in ARGV) {
+        if (arg == filename) {
+            delete ARGV[arg]
+            ARGC--
+        }
+    }
+}
+
+BEGIN {
+    STATS_F = "/tmp/pidstat-stats"
+    NET_F = "/tmp/pidstat-net"
+    CONDENSED_F = "/tmp/pidstat-condensed"
+    TOTP_F = "/tmp/pidstat-totp"
+
+    if (ARGC < 2) {
+        print "usage: pidstat-graph <filename>"
+        exit 1
+    }
+
+    # Settings
+    limit = 100 # Max to show
+
+    # Compatibility switches
+    has_epoch = 0
+
+    timefmt = has_epoch ? "%s" : "%H:%M:%S"
+
+    debug("Cleaning environment first...")
+    run("rm -Rf /tmp/pidstat-* > /dev/null 2>&1", 0)
+
+    tarball = ARGV[ARGC - 1]
+    debug("Extracting data from '" tarball "'")
+    if (run("tar -C / -xvf " tarball, 0) != 0) {
+        exit 1
+    }
+
+    add_arg(TOTP_F)
+}
+{
+    if (FILENAME == tarball) {
+        nextfile
+    }
+
+    if (count > limit) {
+        next
+    }
+
+    pid = $2
+    pids_to_graph[pid] = pid
+
+    count++
+}
+END {
+    debug("Plotting now...")
+    plot_cpu(CONDENSED_F)
+}
